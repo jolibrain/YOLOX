@@ -92,7 +92,10 @@ class YOLOPAFPN(nn.Module):
         #  backbone
         out_features = self.backbone(input)
         features = [out_features[f] for f in self.in_features]
-        [x2, x1, x0] = features
+        # [x2, x1, x0] = features
+        x2 = features[0]
+        x1 = features[1]
+        x0 = features[2]
 
         fpn_out0 = self.lateral_conv0(x0)  # 1024->512/32
         f_out0 = self.upsample(fpn_out0)  # 512/16
