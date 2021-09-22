@@ -2,11 +2,13 @@
 # -*- encoding: utf-8 -*-
 # Copyright (c) 2014-2021 Megvii Inc. All rights reserved.
 
+import torch
 import torch.nn as nn
 
 from .yolo_head import YOLOXHead
 from .yolo_pafpn import YOLOPAFPN
 
+from typing import Optional
 
 class YOLOX(nn.Module):
     """
@@ -25,24 +27,25 @@ class YOLOX(nn.Module):
         self.backbone = backbone
         self.head = head
 
-    def forward(self, x, targets=None):
+    def forward(self, x, targets:Optional[torch.Tensor]=None):
         # fpn output content features of [dark3, dark4, dark5]
         fpn_outs = self.backbone(x)
 
         if self.training:
             assert targets is not None
-            loss, iou_loss, conf_loss, cls_loss, l1_loss, num_fg = self.head(
+            outputs, (loss, iou_loss, conf_loss, cls_loss, l1_loss, num_fg) = self.head(
                 fpn_outs, targets, x
             )
-            outputs = {
-                "total_loss": loss,
-                "iou_loss": iou_loss,
-                "l1_loss": l1_loss,
-                "conf_loss": conf_loss,
-                "cls_loss": cls_loss,
-                "num_fg": num_fg,
-            }
         else:
-            outputs = self.head(fpn_outs)
+            outputs, (loss, iou_loss, conf_loss, cls_loss, l1_loss, num_fg) = self.head(fpn_outs)
 
-        return outputs
+        losses = {
+            "total_loss": loss,
+            "iou_loss": iou_loss,
+            "l1_loss": l1_loss,
+            "conf_loss": conf_loss,
+            "cls_loss": cls_loss,
+            "num_fg": torch.tensor([num_fg]),
+        }
+
+        return outputs, losses
