@@ -34,6 +34,7 @@ class YOLOXHead(nn.Module):
         super().__init__()
         self.bboxes_iou_fct = bboxes_iou
 
+        self.reg_weight = 5.0
         self.num_classes = num_classes
         self.decode_in_inference = True  # for deploy, set to False
 
@@ -442,12 +443,11 @@ class YOLOXHead(nn.Module):
         else:
             loss_l1 = torch.full((1,), 0.0, device=outputs.device)
 
-        reg_weight = 5.0
-        loss = reg_weight * loss_iou + loss_obj + loss_cls + loss_l1
+        loss = self.reg_weight * loss_iou + loss_obj + loss_cls + loss_l1
 
         return (
             loss,
-            reg_weight * loss_iou,
+            self.reg_weight * loss_iou,
             loss_obj,
             loss_cls,
             loss_l1,
