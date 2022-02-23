@@ -492,6 +492,29 @@ class YOLOXHead(nn.Module):
             y_shifts,
         )
 
+        # NOTE: Fix `selected index k out of range`, from https://github.com/Megvii-BaseDetection/YOLOX/pull/811
+        npa = fg_mask.sum().item()  # number of positive anchors
+        if npa == 0 or num_gt == 0:
+            gt_matched_classes = torch.zeros(0, device=fg_mask.device).long()
+            pred_ious_this_matching = torch.rand(0, device=fg_mask.device)
+            matched_gt_inds = gt_matched_classes
+            num_fg = 0
+
+            if mode == "cpu":
+                gt_matched_classes = gt_matched_classes.cuda()
+                fg_mask = fg_mask.cuda()
+                pred_ious_this_matching = pred_ious_this_matching.cuda()
+                matched_gt_inds = matched_gt_inds.cuda()
+                #num_fg = num_fg.cuda()
+
+            return (
+                gt_matched_classes,
+                fg_mask,
+                pred_ious_this_matching,
+                matched_gt_inds,
+                num_fg,
+            )
+        
         bboxes_preds_per_image = bboxes_preds_per_image[fg_mask.clone()]
         cls_preds_ = cls_preds[batch_idx][fg_mask.clone()]
         obj_preds_ = obj_preds[batch_idx][fg_mask.clone()]
@@ -596,6 +619,8 @@ class YOLOXHead(nn.Module):
         dynamic_ks = torch.clamp(topk_ious.sum(1).int(), min=1)
         pos_idx = torch.zeros(0)
         for gt_idx in range(num_gt):
+            if gt_idx >= dynamic_ks.size(dim=0):
+                continue
             _, pos_idx = torch.topk(
                 cost[gt_idx], k=dynamic_ks[gt_idx].item(), largest=False
             )
