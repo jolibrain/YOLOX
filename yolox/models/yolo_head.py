@@ -282,6 +282,8 @@ class YOLOXHead(nn.Module):
 
         # calculate targets
         nlabel = (labels.sum(dim=2) > 0).sum(dim=1)  # number of objects
+        if torch.count_nonzero(nlabel) != nlabel.numel():
+            print("no label")
 
         total_num_anchors = outputs.shape[1]
         x_shifts = torch.cat(x_shifts_list, 1)  # [1, n_anchors_all]
@@ -312,6 +314,9 @@ class YOLOXHead(nn.Module):
                 fg_mask = outputs.new_zeros(total_num_anchors).to(torch.bool)
             else:
                 gt_bboxes_per_image = labels[batch_idx, :num_gt, 1:5]
+                if torch.any(gt_bboxes_per_image[:, 2:] < 0):
+                    print("Bad bbox detected!")
+                    print(gt_bboxes_per_image)
                 gt_classes = labels[batch_idx, :num_gt, 0]
                 bboxes_preds_per_image = bbox_preds[batch_idx]
 
@@ -446,6 +451,8 @@ class YOLOXHead(nn.Module):
             loss_l1 = (
                 self.l1_loss(origin_preds.view(-1, 4)[fg_masks], l1_targets)
             ).sum() / num_fg
+            if torch.count_nonzero(nlabel) != nlabel.numel():
+                print("l1 loss: ", loss_l1)
         else:
             loss_l1 = torch.full((1,), 0.0, device=outputs.device)
 
@@ -465,6 +472,9 @@ class YOLOXHead(nn.Module):
         l1_target[:, 1] = gt[:, 1] / stride - y_shifts
         l1_target[:, 2] = torch.log(gt[:, 2] / stride + eps)
         l1_target[:, 3] = torch.log(gt[:, 3] / stride + eps)
+        if torch.any(torch.isnan(l1_target)):
+            print("L1 nan detected!!!")
+            print(stride, gt)
         return l1_target
 
     @torch.no_grad()
@@ -539,6 +549,8 @@ class YOLOXHead(nn.Module):
 
         pair_wise_ious = self.bboxes_iou_fct(gt_bboxes_per_image, bboxes_preds_per_image, False)
 
+        print("gt_cls_per_image=", gt_classes)
+        print("num_classes", self.num_classes)
         gt_cls_per_image = (
             torch.nn.functional.one_hot(gt_classes.to(torch.int64), self.num_classes)
             .float()
@@ -565,6 +577,9 @@ class YOLOXHead(nn.Module):
             + 3.0 * pair_wise_ious_loss
             + 100000.0 * (~is_in_boxes_and_center)
         )
+        print("min", torch.min(cost))
+        print("max", torch.max(cost))
+        print("mean", torch.mean(cost))
 
         (
             num_fg,
@@ -677,12 +692,18 @@ class YOLOXHead(nn.Module):
     def dynamic_k_matching(self, cost, pair_wise_ious, gt_classes, num_gt:int, fg_mask):
         # Dynamic K
         # ---------------------------------------------------------------
+        print("cost_size", cost.size())
+        print("num_gt", num_gt)
         matching_matrix = torch.zeros_like(cost, dtype=torch.uint8)
 
         ious_in_boxes_matrix = pair_wise_ious
         n_candidate_k = min(10, ious_in_boxes_matrix.size(1))
         topk_ious, _ = torch.topk(ious_in_boxes_matrix, n_candidate_k, dim=1)
+        print("tk min", torch.min(topk_ious))
+        print("tk max", torch.max(topk_ious))
         dynamic_ks = torch.clamp(topk_ious.sum(1).int(), min=1)
+        print("dk min", torch.min(dynamic_ks))
+        print("dk max", torch.max(dynamic_ks))
         pos_idx = torch.zeros(0)
         for gt_idx in range(num_gt):
             if gt_idx >= dynamic_ks.size(dim=0):
