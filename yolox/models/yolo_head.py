@@ -315,24 +315,25 @@ class YOLOXHead(nn.Module):
                 gt_classes = labels[batch_idx, :num_gt, 0]
                 bboxes_preds_per_image = bbox_preds[batch_idx]
 
-                (
-                    gt_matched_classes,
-                    fg_mask,
-                    pred_ious_this_matching,
-                    matched_gt_inds,
-                    num_fg_img,
-                ) = self.get_assignments(  # noqa
-                    batch_idx,
-                    num_gt,
-                    gt_bboxes_per_image,
-                    gt_classes,
-                    bboxes_preds_per_image,
-                    expanded_strides,
-                    x_shifts,
-                    y_shifts,
-                    cls_preds,
-                    obj_preds,
-                )
+                with torch.no_grad():
+                    (
+                        gt_matched_classes,
+                        fg_mask,
+                        pred_ious_this_matching,
+                        matched_gt_inds,
+                        num_fg_img,
+                    ) = self.get_assignments(  # noqa
+                        batch_idx,
+                        num_gt,
+                        gt_bboxes_per_image,
+                        gt_classes,
+                        bboxes_preds_per_image,
+                        expanded_strides,
+                        x_shifts,
+                        y_shifts,
+                        cls_preds,
+                        obj_preds,
+                    )
                 """
                 try:
                     (
@@ -460,7 +461,6 @@ class YOLOXHead(nn.Module):
         l1_target[:, 3] = torch.log(gt[:, 3] / stride + eps)
         return l1_target
 
-    @torch.no_grad()
     def get_assignments(
         self,
         batch_idx: int,
